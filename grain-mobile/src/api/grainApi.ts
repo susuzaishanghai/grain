@@ -9,6 +9,11 @@ export type RuntimeApiConfig = {
   apiKey: string;
   openaiModel?: string;
   openaiVisionModel?: string;
+  imageEnabled?: boolean;
+  imageKind?: 'grain_backend' | 'openai_compatible' | 'dashscope_wanx';
+  imageBaseUrl?: string;
+  imageApiKey?: string;
+  openaiImageModel?: string;
 };
 
 let runtimeApiConfig: RuntimeApiConfig | null = null;
@@ -97,6 +102,26 @@ export type FeedbackRequest = {
   factIdsUsed: string[];
   sourceHintIdsUsed: string[];
   note?: string;
+};
+
+export type GenerateCardImageRequest = {
+  requestedLocale: string;
+  categoryId: string;
+  nodeTypeId: NodeTypeId;
+  countryId: string;
+  objectName: string;
+  objectGeneric: string;
+  chapterTitle: string;
+  displayTimeLabel: string;
+  cardTitle: string;
+  facts: string[];
+  keywords: string[];
+};
+
+export type GenerateCardImageResponse = {
+  imageUrl?: string;
+  imageBase64?: string;
+  mimeType?: string;
 };
 
 export function getGrainApiBaseUrl(): string | null {
@@ -225,6 +250,175 @@ export async function submitFeedback(req: FeedbackRequest): Promise<{ ok: boolea
     body: JSON.stringify(req),
   });
   return parseJsonOrThrow<{ ok: boolean }>(res);
+}
+
+export async function generateCardImageWithGrainBackend(params: {
+  baseUrl: string;
+  apiKey?: string;
+  req: GenerateCardImageRequest;
+}): Promise<GenerateCardImageResponse> {
+  const url = joinV1(params.baseUrl, 'image');
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const key = params.apiKey?.trim();
+  if (key) headers.Authorization = `Bearer ${key}`;
+
+  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(params.req) });
+  return parseJsonOrThrow<GenerateCardImageResponse>(res);
+}
+
+type OpenAIImagesResponse = {
+  data?: Array<{ b64_json?: string; url?: string }>;
+  error?: { message?: string };
+};
+
+export async function generateCardImageWithOpenAiCompatible(params: {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  prompt: string;
+  size?: '512x512' | '768x768' | '1024x1024';
+}): Promise<GenerateCardImageResponse> {
+  if (/dashscope\.aliyuncs\.com/i.test(params.baseUrl)) {
+    throw new Error('OPENAI_COMPAT_IMAGES_NOT_SUPPORTED_ON_DASHSCOPE');
+  }
+  const url = joinV1(params.baseUrl, 'images/generations');
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${params.apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: params.model,
+      prompt: params.prompt,
+      size: params.size ?? '512x512',
+      response_format: 'b64_json',
+    }),
+  });
+  const json = await parseJsonOrThrowStrict<OpenAIImagesResponse>(res);
+  if (json.error?.message) throw new Error(json.error.message);
+  const first = json.data?.[0];
+  if (first?.b64_json) return { imageBase64: first.b64_json, mimeType: 'image/png' };
+  if (first?.url) return { imageUrl: first.url };
+  throw new Error('MODEL_EMPTY_IMAGE');
+}
+
+type DashscopeWanxOutput = {
+  task_id?: string;
+  task_status?: string;
+  results?: Array<{ url?: string }>;
+  code?: string;
+  message?: string;
+};
+
+type DashscopeWanxSubmitResponse = {
+  request_id?: string;
+  output?: DashscopeWanxOutput;
+  code?: string;
+  message?: string;
+};
+
+type DashscopeWanxTaskResponse = {
+  request_id?: string;
+  output?: DashscopeWanxOutput;
+  code?: string;
+  message?: string;
+};
+
+function dashscopeBase(baseUrl: string): string {
+  let trimmed = trimSlashes(baseUrl.trim());
+  if (!trimmed) return 'https://dashscope.aliyuncs.com';
+
+  if (!/^https?:\/\//i.test(trimmed)) trimmed = `https://${trimmed}`;
+
+  const lower = trimmed.toLowerCase();
+  const compatIndex = lower.indexOf('/compatible-mode/v1');
+  if (compatIndex !== -1) trimmed = trimmed.slice(0, compatIndex);
+
+  const apiIndex = trimmed.toLowerCase().indexOf('/api/v1');
+  if (apiIndex !== -1) trimmed = trimmed.slice(0, apiIndex);
+
+  return trimSlashes(trimmed);
+}
+
+function dashscopeSizeForModel(
+  model: string,
+  size: '512x512' | '768x768' | '1024x1024' | undefined
+): string {
+  const m = model.toLowerCase();
+  // DashScope qwen-image 支持的 size 是固定集合（服务端会返回允许列表）。
+  // 这里默认走方图，适配卡片详情页布局。
+  if (m.includes('qwen-image')) return '1328*1328';
+
+  switch (size) {
+    case '1024x1024':
+      return '1024*1024';
+    case '768x768':
+      return '768*768';
+    default:
+      return '512*512';
+  }
+}
+
+export async function generateCardImageWithDashscopeWanx(params: {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  prompt: string;
+  size?: '512x512' | '768x768' | '1024x1024';
+}): Promise<GenerateCardImageResponse> {
+  const base = dashscopeBase(params.baseUrl);
+  const submitUrl = `${base}/api/v1/services/aigc/text2image/image-synthesis`;
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${params.apiKey}`,
+    'Content-Type': 'application/json',
+    'X-DashScope-Async': 'enable',
+  };
+
+  const submitRes = await fetch(submitUrl, {
+    method: 'POST',
+    headers,
+      body: JSON.stringify({
+        model: params.model,
+        input: { prompt: params.prompt },
+      parameters: { size: dashscopeSizeForModel(params.model, params.size) },
+    }),
+  });
+
+  const submitted = await parseJsonOrThrowStrict<DashscopeWanxSubmitResponse>(submitRes);
+  if (submitted.code || submitted.message) throw new Error(submitted.message ?? submitted.code ?? 'DASHSCOPE_ERROR');
+
+  const directUrl = submitted.output?.results?.[0]?.url;
+  if (directUrl) return { imageUrl: directUrl };
+
+  const taskId = submitted.output?.task_id;
+  if (!taskId) throw new Error('DASHSCOPE_TASK_ID_MISSING');
+
+  const taskUrl = `${base}/api/v1/tasks/${encodeURIComponent(taskId)}`;
+  const started = Date.now();
+  const timeoutMs = 30_000;
+  const intervalMs = 1_200;
+
+  // Poll until SUCCEEDED/FAILED or timeout.
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const res = await fetch(taskUrl, { headers: { Authorization: `Bearer ${params.apiKey}` } });
+    const task = await parseJsonOrThrowStrict<DashscopeWanxTaskResponse>(res);
+    if (task.code || task.message) throw new Error(task.message ?? task.code ?? 'DASHSCOPE_ERROR');
+
+    const status = String(task.output?.task_status ?? '').toUpperCase();
+    const url = task.output?.results?.[0]?.url;
+    if (url) return { imageUrl: url };
+
+    if (status === 'FAILED' || status === 'CANCELED') {
+      const detail = [task.output?.code, task.output?.message].filter(Boolean).join(': ');
+      throw new Error(detail ? `DASHSCOPE_IMAGE_FAILED: ${detail}` : 'DASHSCOPE_IMAGE_FAILED');
+    }
+    if (status === 'SUCCEEDED') {
+      const detail = [task.output?.code, task.output?.message].filter(Boolean).join(': ');
+      throw new Error(detail ? `DASHSCOPE_IMAGE_SUCCEEDED_BUT_EMPTY: ${detail}` : 'DASHSCOPE_IMAGE_SUCCEEDED_BUT_EMPTY');
+    }
+    if (Date.now() - started > timeoutMs) throw new Error('DASHSCOPE_IMAGE_TIMEOUT');
+
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
 }
 
 type OpenAIChatCompletionResponse = {

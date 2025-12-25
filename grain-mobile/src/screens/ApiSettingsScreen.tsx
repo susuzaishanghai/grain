@@ -26,10 +26,20 @@ export function ApiSettingsScreen({ navigation }: Props) {
   const [apiKey, setApiKey] = useState<string>(apiConfig?.apiKey ?? '');
   const [openaiModel, setOpenaiModel] = useState<string>(apiConfig?.openaiModel ?? 'gpt-4o-mini');
   const [openaiVisionModel, setOpenaiVisionModel] = useState<string>(apiConfig?.openaiVisionModel ?? '');
+  const [imageEnabled, setImageEnabled] = useState<boolean>(Boolean(apiConfig?.imageEnabled ?? false));
+  const [imageKind, setImageKind] = useState<'grain_backend' | 'openai_compatible' | 'dashscope_wanx'>(
+    apiConfig?.imageKind ?? apiConfig?.kind ?? 'grain_backend'
+  );
+  const [imageBaseUrl, setImageBaseUrl] = useState<string>(apiConfig?.imageBaseUrl ?? '');
+  const [imageApiKey, setImageApiKey] = useState<string>(apiConfig?.imageApiKey ?? '');
+  const [openaiImageModel, setOpenaiImageModel] = useState<string>(apiConfig?.openaiImageModel ?? '');
   const [testing, setTesting] = useState(false);
 
   const saveNow = (nextEnabled: boolean) => {
     const url = baseUrl.trim().replace(/\/+$/, '');
+    const imageUrl = imageBaseUrl.trim().replace(/\/+$/, '');
+    const imageKey = imageApiKey.trim();
+    const imageModel = openaiImageModel.trim();
     if (nextEnabled && !url) {
       Alert.alert('请填写 Base URL', '启用云端时必须配置后端地址。');
       return;
@@ -42,6 +52,14 @@ export function ApiSettingsScreen({ navigation }: Props) {
       Alert.alert('请填写模型名', '例如：gpt-4o-mini / qwen-plus / deepseek-chat（以你的供应商为准）。');
       return;
     }
+    if (nextEnabled && imageEnabled && imageKind !== 'grain_backend' && !(imageKey || apiKey.trim())) {
+      Alert.alert('请填写生图 API Key', '启用配图且选择 OpenAI 兼容直连生图时，需要提供 API Key（可填在生图 API Key 或上面的 API Key）。');
+      return;
+    }
+    if (nextEnabled && imageEnabled && imageKind !== 'grain_backend' && !imageModel) {
+      Alert.alert('请填写生图模型名', '启用配图后，需要填写生图模型名（例如：gpt-image-1 / qwen-image / wanx-v2 等）。');
+      return;
+    }
     saveApiConfig({
       enabled: nextEnabled,
       kind,
@@ -49,6 +67,11 @@ export function ApiSettingsScreen({ navigation }: Props) {
       apiKey: apiKey.trim(),
       openaiModel: openaiModel.trim(),
       openaiVisionModel: openaiVisionModel.trim() ? openaiVisionModel.trim() : undefined,
+      imageEnabled,
+      imageKind,
+      imageBaseUrl: imageUrl ? imageUrl : undefined,
+      imageApiKey: imageKey ? imageKey : undefined,
+      openaiImageModel: imageModel ? imageModel : undefined,
     });
     clearRemoteBundle();
     Alert.alert('已保存', nextEnabled ? '云端 API 已启用。' : '云端 API 已关闭（强制走本地示例）。');
@@ -67,14 +90,19 @@ export function ApiSettingsScreen({ navigation }: Props) {
           clearRemoteBundle();
           const next = getGrainApiBaseUrl() ?? '';
           setEnabled(Boolean(next));
-          setKind('grain_backend');
-          setBaseUrl(next);
-          setApiKey('');
-          setOpenaiModel('gpt-4o-mini');
-          setOpenaiVisionModel('');
+            setKind('grain_backend');
+            setBaseUrl(next);
+            setApiKey('');
+            setOpenaiModel('gpt-4o-mini');
+            setOpenaiVisionModel('');
+            setImageEnabled(false);
+            setImageKind('grain_backend');
+            setImageBaseUrl('');
+            setImageApiKey('');
+            setOpenaiImageModel('');
+          },
         },
-      },
-    ]);
+      ]);
   };
 
   const onTest = async () => {
@@ -203,6 +231,108 @@ export function ApiSettingsScreen({ navigation }: Props) {
               autoCorrect={false}
               style={styles.input}
             />
+          </>
+        ) : null}
+
+        <View style={[styles.rowBetween, { marginTop: spacing.l }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>启用知识卡配图（生图）</Text>
+            <Text style={styles.hint}>打开“知识卡详情”时会生成一张插画；失败不影响阅读，可重试。</Text>
+          </View>
+          <Switch
+            value={imageEnabled}
+            onValueChange={setImageEnabled}
+            trackColor={{ false: 'rgba(255,255,255,0.18)', true: 'rgba(47,107,255,0.6)' }}
+            thumbColor={imageEnabled ? colors.blue : 'rgba(255,255,255,0.75)'}
+          />
+        </View>
+
+        {imageEnabled ? (
+          <>
+            <Text style={[styles.label, { marginTop: spacing.m }]}>生图接口类型</Text>
+            <View style={styles.kindRow}>
+              <Pressable
+                onPress={() => setImageKind('grain_backend')}
+                style={[styles.kindBtn, imageKind === 'grain_backend' && styles.kindBtnOn]}
+              >
+                <Text style={[styles.kindText, imageKind === 'grain_backend' && styles.kindTextOn]}>Grain 后端</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setImageKind('openai_compatible')}
+                style={[styles.kindBtn, imageKind === 'openai_compatible' && styles.kindBtnOn]}
+              >
+                <Text style={[styles.kindText, imageKind === 'openai_compatible' && styles.kindTextOn]}>OpenAI 兼容（直连）</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setImageKind('dashscope_wanx')}
+                style={[styles.kindBtn, imageKind === 'dashscope_wanx' && styles.kindBtnOn]}
+              >
+                <Text style={[styles.kindText, imageKind === 'dashscope_wanx' && styles.kindTextOn]}>DashScope 万相</Text>
+              </Pressable>
+            </View>
+
+            <Text style={[styles.label, { marginTop: spacing.m }]}>生图 Base URL（可选）</Text>
+            <TextInput
+              value={imageBaseUrl}
+              onChangeText={setImageBaseUrl}
+              placeholder={
+                imageKind === 'dashscope_wanx'
+                  ? '留空=默认 https://dashscope.aliyuncs.com（不要填 /api/v1）'
+                  : '留空=复用上面的 Base URL'
+              }
+              placeholderTextColor={colors.muted2}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={styles.input}
+            />
+
+            <Text style={[styles.label, { marginTop: spacing.m }]}>生图 API Key（可选）</Text>
+            <TextInput
+              value={imageApiKey}
+              onChangeText={setImageApiKey}
+              placeholder="留空=复用上面的 API Key"
+              placeholderTextColor={colors.muted2}
+              autoCapitalize="none"
+              autoCorrect={false}
+              secureTextEntry
+              style={styles.input}
+            />
+
+            {imageKind === 'openai_compatible' ? (
+              <>
+                <Text style={[styles.label, { marginTop: spacing.m }]}>生图模型名（必填）</Text>
+                <TextInput
+                  value={openaiImageModel}
+                  onChangeText={setOpenaiImageModel}
+                  placeholder="例如：gpt-image-1 / wanx-v2（以你的供应商为准）"
+                  placeholderTextColor={colors.muted2}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.input}
+                />
+              </>
+            ) : imageKind === 'dashscope_wanx' ? (
+              <>
+                <Text style={[styles.label, { marginTop: spacing.m }]}>DashScope 生图模型 Code（必填）</Text>
+                <TextInput
+                  value={openaiImageModel}
+                  onChangeText={setOpenaiImageModel}
+                  placeholder="例如：qwen-image / wanx-v2（以 DashScope 控制台为准）"
+                  placeholderTextColor={colors.muted2}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.input}
+                />
+                <Text style={[styles.hint, { marginTop: spacing.s }]}>
+                  说明：DashScope 不支持 OpenAI 生图接口 `/v1/images/generations`；这里会走 DashScope 原生生图接口（App 已内置）。Base URL 建议填
+                  `https://dashscope.aliyuncs.com`（不要填 `/api/v1`）。
+                </Text>
+              </>
+            ) : (
+              <Text style={[styles.hint, { marginTop: spacing.s }]}>
+                Grain 后端模式：App 会调用 `POST /v1/image`，由你的后端决定接哪家生图服务。
+              </Text>
+            )}
           </>
         ) : null}
 

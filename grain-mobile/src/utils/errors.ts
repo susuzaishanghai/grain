@@ -12,7 +12,7 @@ export function humanizeCloudError(e: unknown): string {
   }
 
   if (status === 404 || has(/HTTP 404|NOT_FOUND/i)) {
-    return '接口地址 404：Base URL 可能填错。请确保填到 OpenAI 兼容的 /v1（例如 https://dashscope.aliyuncs.com/compatible-mode/v1）。';
+    return '接口地址 404：该 Base URL/供应商可能不支持当前接口路径（例如 OpenAI 生图需要 `/v1/images/generations`）。如你在用 DashScope，请在“API 设置→配图”把生图接口类型切到“DashScope 万相”。';
   }
 
   if (status === 429 || has(/HTTP 429|RATE_LIMIT|rate limit|Too Many Requests/i)) {
@@ -34,7 +34,29 @@ export function humanizeCloudError(e: unknown): string {
     return '模型输出不是有效 JSON。建议更换文本模型或重试。';
   }
 
+  if (has(/MODEL_EMPTY_IMAGE|IMAGE_EMPTY_RESPONSE/i)) {
+    return '生图服务未返回图片数据，请检查生图模型名/接口是否支持生图。';
+  }
+
+  if (has(/OPENAI_COMPAT_IMAGES_NOT_SUPPORTED_ON_DASHSCOPE/i)) {
+    return 'DashScope 不支持 OpenAI 生图接口 `/v1/images/generations`；请在“API 设置→配图”把生图接口类型切到“DashScope 万相”（Base URL 用 https://dashscope.aliyuncs.com，不要填 /api/v1），或改用你自己的后端 /v1/image。';
+  }
+
+  if (has(/DASHSCOPE_IMAGE_TIMEOUT/i)) {
+    return 'DashScope 万相生图超时：可能是网络较慢或任务排队。请稍后重试，或换更短的提示词/更小尺寸。';
+  }
+
+  if (has(/DASHSCOPE_IMAGE_FAILED/i)) {
+    const detail = rawMsg.includes(':') ? rawMsg.split(':').slice(1).join(':').trim() : '';
+    return detail
+      ? `DashScope 万相生图失败：${detail}（常见原因：万相模型名填错/Key 无权限或额度不足/内容审核拦截）。`
+      : 'DashScope 万相生图失败：常见原因是万相模型名填错、Key 无权限/额度不足或内容审核拦截。请检查“API 设置→配图→万相模型名”。';
+  }
+
+  if (has(/DASHSCOPE_IMAGE_SUCCEEDED_BUT_EMPTY/i)) {
+    return 'DashScope 万相任务返回成功但没有图片：请重试；若持续出现，请检查万相模型名/接口返回格式是否有变化。';
+  }
+
   if (rawMsg.length > 240) return `${rawMsg.slice(0, 240)}…`;
   return rawMsg || '请稍后重试';
 }
-

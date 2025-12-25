@@ -144,3 +144,35 @@
 { "ok": true }
 ```
 
+## 5) 生图（知识卡配图，可选）
+
+目标：不阻塞阅读，图片失败可降级；App 只依赖一个“按卡片生成配图”的接口。
+
+### `POST /v1/image`
+
+**Request（application/json）**
+```json
+{
+  "requestedLocale": "zh",
+  "categoryId": "food_drink",
+  "nodeTypeId": "ORIGIN",
+  "countryId": "FR",
+  "objectName": "鸡蛋",
+  "objectGeneric": "蛋",
+  "chapterTitle": "从蛋的起点开始",
+  "displayTimeLabel": "公元前 2000–1000",
+  "cardTitle": "……",
+  "facts": ["……", "……"],
+  "keywords": ["……", "……", "……"]
+}
+```
+
+**Response（200）**
+返回其一即可（推荐 `imageUrl` 使用短时可访问的公开链接；或 `imageBase64` 直接内嵌）：
+```json
+{ "imageUrl": "https://.../image.png" }
+```
+或
+```json
+{ "imageBase64": "iVBORw0KGgoAAA...", "mimeType": "image/png" }
+```

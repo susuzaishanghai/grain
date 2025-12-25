@@ -47,6 +47,9 @@ type AppContextValue = {
   toggleCollect: (card: KnowledgeCard) => void;
   isCollected: (cardId: string) => boolean;
 
+  cardImagesById: Record<string, string>;
+  setCardImage: (cardId: string, uri: string | null) => void;
+
   viewedByDay: ViewedByDay;
   exploredCountryIds: Set<CountryId>;
   markViewed: (card: KnowledgeCard) => void;
@@ -213,7 +216,27 @@ function normalizeApiConfig(raw: unknown): RuntimeApiConfig | null {
   const kind = r.kind === 'openai_compatible' || r.kind === 'grain_backend' ? r.kind : 'grain_backend';
   const openaiModel = typeof r.openaiModel === 'string' ? r.openaiModel : undefined;
   const openaiVisionModel = typeof r.openaiVisionModel === 'string' ? r.openaiVisionModel : undefined;
-  return { enabled, kind, baseUrl, apiKey, openaiModel, openaiVisionModel };
+  const imageEnabled = Boolean(r.imageEnabled);
+  const imageKind =
+    r.imageKind === 'openai_compatible' || r.imageKind === 'grain_backend' || r.imageKind === 'dashscope_wanx'
+      ? r.imageKind
+      : undefined;
+  const imageBaseUrl = typeof r.imageBaseUrl === 'string' ? r.imageBaseUrl : undefined;
+  const imageApiKey = typeof r.imageApiKey === 'string' ? r.imageApiKey : undefined;
+  const openaiImageModel = typeof r.openaiImageModel === 'string' ? r.openaiImageModel : undefined;
+  return {
+    enabled,
+    kind,
+    baseUrl,
+    apiKey,
+    openaiModel,
+    openaiVisionModel,
+    imageEnabled,
+    imageKind,
+    imageBaseUrl,
+    imageApiKey,
+    openaiImageModel,
+  };
 }
 
 const DEFAULT_SESSION: SessionState = {
@@ -233,6 +256,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [session, setSessionState] = useState<SessionState>(DEFAULT_SESSION);
   const [collectedCardsById, setCollectedCardsById] = useState<Record<string, KnowledgeCard>>({});
+  const [cardImagesById, setCardImagesById] = useState<Record<string, string>>({});
   const [viewedByDay, setViewedByDay] = useState<ViewedByDay>({});
   const [exploredCountryIds, setExploredCountryIds] = useState<Set<CountryId>>(new Set());
   const [remoteBundle, setRemoteBundleState] = useState<RemoteBundle | null>(null);
@@ -283,12 +307,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       patch.objectGeneric !== undefined
     ) {
       setRemoteBundleState(null);
+      setCardImagesById({});
     }
     setSessionState((prev) => ({ ...prev, ...patch }));
   };
 
   const swapCountries = () => {
     setRemoteBundleState(null);
+    setCardImagesById({});
     setSessionState((prev) => ({ ...prev, countryA: prev.countryB, countryB: prev.countryA }));
   };
 
@@ -306,6 +332,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const isCollected = (cardId: string) => Boolean(collectedCardsById[cardId]);
+
+  const setCardImage = (cardId: string, uri: string | null) => {
+    setCardImagesById((prev) => {
+      const next = { ...prev };
+      if (!uri) {
+        delete next[cardId];
+        return next;
+      }
+      next[cardId] = uri;
+
+      const keys = Object.keys(next);
+      if (keys.length <= 16) return next;
+
+      // Drop oldest-ish entries to avoid keeping too many base64 images in memory.
+      for (const k of keys.slice(0, keys.length - 16)) {
+        delete next[k];
+      }
+      return next;
+    });
+  };
 
   const saveApiConfig = (config: RuntimeApiConfig) => {
     const normalized = normalizeApiConfig(config) ?? config;
@@ -438,6 +484,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     collectedCardsById,
     toggleCollect,
     isCollected,
+    cardImagesById,
+    setCardImage,
     viewedByDay,
     exploredCountryIds,
     markViewed,
