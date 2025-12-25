@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "grain-mobile",
+    "slug": "grain-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.grain",
+      "infoPlist": {
+        "NSCameraUsageDescription": "用于拍照识别物体并生成对照内容（MVP示例）。"
+      }
+    },
+    "android": {
+      "permissions": [
+        "CAMERA"
+      ],
+      "package": "com.yourcompany.grain",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "21a1b1f3-8b64-42e1-b8dd-153115c8cd3b"
+      }
+    }
+  }
+}

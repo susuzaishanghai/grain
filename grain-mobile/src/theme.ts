@@ -1,0 +1,32 @@
+/* ASCII PREAMBLE to avoid tooling UTF-8 slicing issue: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA */
+
+export const colors = {
+  bg: '#0B0E14',
+  bg2: '#0F1420',
+  panel: 'rgba(255,255,255,0.08)',
+  panel2: 'rgba(255,255,255,0.12)',
+  line: 'rgba(255,255,255,0.12)',
+  text: 'rgba(255,255,255,0.92)',
+  muted: 'rgba(255,255,255,0.64)',
+  muted2: 'rgba(255,255,255,0.48)',
+  blue: '#2F6BFF',
+  yellow: '#FFD400',
+  green: '#35D07F',
+  red: '#FF5A5A',
+};
+
+export const radius = {
+  s: 12,
+  m: 16,
+  l: 22,
+  xl: 28,
+};
+
+export const spacing = {
+  xs: 6,
+  s: 10,
+  m: 14,
+  l: 16,
+  xl: 20,
+};
+
